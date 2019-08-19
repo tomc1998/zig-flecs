@@ -1409,7 +1409,7 @@ bool ecs_has_intern(
 
     ecs_world_t *world_arg = world;
     ecs_type_t entity_type = ecs_get_type(world_arg, entity);
-    return ecs_type_contains(world, entity_type, type, match_any, match_prefabs) != 0;
+    return ecs_type_contains(world, entity_type, type, match_any, match_prefabs, NULL);
 }
 
 bool _ecs_has(

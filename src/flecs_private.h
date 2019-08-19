@@ -112,12 +112,13 @@ ecs_type_t ecs_type_merge_intern(
     ecs_entity_array_t *to_remove_intersect);
 
 /* Test if type_1 contains type_2 */
-ecs_entity_t ecs_type_contains(
+bool ecs_type_contains(
     ecs_world_t *world,
     ecs_type_t type_1,
     ecs_type_t type_2,
     bool match_all,
-    bool match_prefab);
+    bool match_prefab,
+    ecs_entity_t *found);
 
 /* Test if type contains component */
 bool ecs_type_has_entity_intern(

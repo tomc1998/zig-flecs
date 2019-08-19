@@ -1788,16 +1788,19 @@ ecs_entity_t ecs_new_component(
     size_t size);
 
 /** Create a new query */
+FLECS_EXPORT
 ecs_query_t* ecs_new_query(
     ecs_world_t *world,
     ecs_signature_t *signature);
 
 /* Create query iterator */
+FLECS_EXPORT
 ecs_query_iter_t ecs_query_iter(
     ecs_query_t *query,
     uint32_t offset,
     uint32_t limit);
 
+FLECS_EXPORT
 bool ecs_query_next(
     ecs_query_iter_t *iter);
 
