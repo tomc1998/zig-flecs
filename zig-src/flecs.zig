@@ -22,8 +22,14 @@ pub const Rows = struct {
     pub fn getWorldTime(self: @This()) f32 { return self.inner.world_time; }
     pub fn getFrameOffset(self: @This()) u32 { return self.inner.frame_offset; }
     pub fn getOffset(self: @This()) u32      { return self.inner.offset; }
-    pub fn getCount(self: @This()) u32       { return self.inner.count; }
+    pub fn count(self: @This()) u32       { return self.inner.count; }
     pub fn getInterruptedBy(self: @This()) u32 { return self.inner.count; }
+
+    /// Return the column at the given ix. ty should be the type of entities in
+    /// that column (see the entity signature).
+    pub fn getColumn(self: @This(), comptime T: type, ix: usize) [*]T {
+        return @ptrCast([*]T, @alignCast(@alignOf(T), c_flecs._ecs_column(self.inner, @sizeOf(T), 1)));
+    }
 };
 
 
@@ -70,7 +76,7 @@ pub const World = struct {
         c_flecs.ecs_set_target_fps(self.inner, fps);
     }
 
-    pub fn registerComponent(self: *@This(), comptime T: type) Component {
+    pub fn registerComponent(self: @This(), comptime T: type) Component {
         comptime var c_string_lit : [@typeName(T).len + 1]u8 = undefined;
         comptime {
             inline for (@typeName(T)) |c, ix| {
@@ -81,21 +87,21 @@ pub const World = struct {
         return c_flecs.ecs_new_component(self.inner, &c_string_lit, @sizeOf(T));
     }
 
-    pub fn progress(self: *@This()) void {
+    pub fn progress(self: @This()) void {
         _ = c_flecs.ecs_progress(self.inner, self.frame_delta);
     }
 
     /// Register a system with the given signature: https://github.com/SanderMertens/flecs/blob/master/Manual.md#system-signatures
-    pub fn registerSystem(self: *@This(), name: [*c]const u8, phase: Phase, function: fn(Rows) void, sig: [*c]const u8) !void {
+    pub fn registerSystem(self: @This(), name: [*c]const u8, phase: Phase, function: fn(Rows) void, sig: [*c]const u8) !void {
         const sys = c_flecs.ecs_new_system(self.inner, name, @bitCast(c_flecs.EcsSystemKind, phase), sig, systemDispatcher);
         _ = try system_map.?.put(sys, function);
     }
 
-    pub fn new(self: *@This()) Entity {
+    pub fn new(self: @This()) Entity {
         return c_flecs._ecs_new(self.inner, null);
     }
 
-    pub fn set(self: *@This(), entity: Entity, c_type: Component, val: var) void {
+    pub fn set(self: @This(), entity: Entity, c_type: Component, val: var) void {
         var val_copied = val;
         _ = c_flecs._ecs_set_ptr(self.inner, entity, c_type, @sizeOf(@typeOf(val)), &val_copied);
     }

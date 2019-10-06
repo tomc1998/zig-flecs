@@ -6,6 +6,14 @@ const Pos = struct {
 };
 
 pub fn move(rows: ecs.Rows) void {
+    const pos_col = rows.getColumn(Pos, 1);
+    var ii : usize = 0;
+    while (ii < rows.count()) {
+        pos_col[ii].x += 1.0;
+        pos_col[ii].y += 1.0;
+        std.debug.warn("{}\n", pos_col[ii]);
+        ii += 1;
+    }
 }
 
 pub fn main() !void {
