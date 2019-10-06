@@ -1,4 +1,4 @@
-See (the original repository)[https://github.com/SanderMertens/flecs]
+See [the original repository](https://github.com/SanderMertens/flecs)
 
 # Why is this a fork?
 
