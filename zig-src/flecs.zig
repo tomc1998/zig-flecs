@@ -2,26 +2,28 @@ const std = @import("std");
 pub const c_flecs = @import("c_flecs.zig");
 
 pub const Entity = c_flecs.ecs_entity_t;
-
-pub const Component = struct {
-    inner: c_flecs.ecs_entity_t,
-};
+pub const Component = Entity;
+pub const System = Entity;
 
 pub const Phase = enum(@TagType(c_flecs.EcsSystemKind)) {
     OnUpdate = @enumToInt(c_flecs.EcsSystemKind.EcsOnUpdate),
 };
 
 pub const Rows = struct {
-    inner: *c_flecs.ecs_rows_t,
+    pub inner: *c_flecs.ecs_rows_t,
     fn init(rows: *c_flecs.ecs_rows_t) @This() {
         return @This() {
             .inner = rows,
         };
     }
 
-    pub fn getSystemId(self: @This()) Entity {
-        return self.inner.system;
-    }
+    pub fn getSystem(self: @This()) System { return self.inner.system; }
+    pub fn getDeltaTime(self: @This()) f32 { return self.inner.delta_time; }
+    pub fn getWorldTime(self: @This()) f32 { return self.inner.world_time; }
+    pub fn getFrameOffset(self: @This()) u32 { return self.inner.frame_offset; }
+    pub fn getOffset(self: @This()) u32      { return self.inner.offset; }
+    pub fn getCount(self: @This()) u32       { return self.inner.count; }
+    pub fn getInterruptedBy(self: @This()) u32 { return self.inner.count; }
 };
 
 
@@ -76,7 +78,7 @@ pub const World = struct {
             }
             c_string_lit[c_string_lit.len - 1] = 0;
         }
-        return Component { .inner = c_flecs.ecs_new_component(self.inner, &c_string_lit, @sizeOf(T)) };
+        return c_flecs.ecs_new_component(self.inner, &c_string_lit, @sizeOf(T));
     }
 
     pub fn progress(self: *@This()) void {
@@ -95,7 +97,7 @@ pub const World = struct {
 
     pub fn set(self: *@This(), entity: Entity, c_type: Component, val: var) void {
         var val_copied = val;
-        _ = c_flecs._ecs_set_ptr(self.inner, entity, c_type.inner, @sizeOf(@typeOf(val)), &val_copied);
+        _ = c_flecs._ecs_set_ptr(self.inner, entity, c_type, @sizeOf(@typeOf(val)), &val_copied);
     }
 };
 
