@@ -32,9 +32,12 @@ popd
 ```
 
 Now you have a `build/libflecs_static.a` file. Link to this when building your
-zig project (with `LibExeObjStep.addObjectFile("/path/to/flecs/build/libflecs_static.a")`).
+zig project (with
+`LibExeObjStep.addObjectFile("/path/to/flecs/build/libflecs_static.a")`). Make
+sure to also link libc (`linkSystemLibrary("c")`).
 
-Then you can add the zig bindings to be built with `LibExeObjStep.addPackagePath("flecs", "/path/to/flecs/zig-src/flecs.zig")`.
+Then you can add the zig bindings to be built with
+`LibExeObjStep.addPackagePath("flecs", "/path/to/flecs/zig-src/flecs.zig")`.
 
 Import it into your project with `@import`:
 
