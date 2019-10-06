@@ -44,21 +44,8 @@ fn initSystemDispatcher(comptime function: fn (rows: Rows) void) extern fn (rows
     }.function;
 }
 
-/// Create a static buffer
-fn createStaticBuffer(comptime val: var) *@typeOf(val) {
-    return &struct {
-        pub var buf : @typeOf(val) = val;
-    }.buf;
-}
-
-/// Given a comptime string lit, convert it to a nul-terminated c string lit
-fn toCStringLit(comptime str : []const u8) comptime [*c]u8 {
-    comptime var buf : [str.len + 1]u8 = undefined;
-    comptime {
-        std.mem.copy(u8, &buf, str);
-    }
-    buf[buf.len - 1] = 0;
-    return createStaticBuffer(buf);
+fn toCStringLit(comptime string: []const u8) [*c]const u8 {
+    return (string ++ "\x00")[0..].ptr;
 }
 
 extern "c" fn systemDispatcher(rows: [*c]c_flecs.ecs_rows_t) void {
