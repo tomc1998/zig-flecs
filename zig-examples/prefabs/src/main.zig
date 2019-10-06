@@ -1,6 +1,10 @@
 const ecs = @import("flecs");
 const std = @import("std");
 
+const Vel = struct {
+    x: f32, y: f32,
+};
+
 const Pos = struct {
     x: f32, y: f32,
 };
@@ -21,9 +25,15 @@ pub fn main() void {
     defer world.deinit();
     world.setTargetFps(60);
     world.registerComponent(Pos);
+
+    // Register the systems
     world.registerSystem("move", ecs.Phase.OnUpdate, move, "Pos");
 
-    const e = world.new(Pos { .x = 0.0, .y = 0.0 });
+    // Create a prefab
+    const prefab = world.newPrefab(Pos { .x = 0.0, .y = 0.0 });
+
+    // Instance that prefab
+    const e = world.newInstance(prefab);
 
     while (true) {
         world.progress();
