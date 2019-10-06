@@ -10,7 +10,7 @@ const Pos = struct {
 };
 
 pub fn move(rows: ecs.Rows) void {
-    const pos_col = rows.getColumn(Pos, 1);
+    const pos_col = rows.col(Pos);
     var ii : usize = 0;
     while (ii < rows.count()) {
         pos_col[ii].x += 1.0;
@@ -27,7 +27,7 @@ pub fn main() void {
     world.registerComponent(Pos);
 
     // Register the systems
-    world.registerSystem("move", ecs.Phase.OnUpdate, move, "Pos");
+    world.registerSystem("move", ecs.Phase.OnUpdate, move, ecs.buildSig().col(Pos));
 
     // Create a prefab
     const prefab = world.newPrefab(Pos { .x = 0.0, .y = 0.0 });

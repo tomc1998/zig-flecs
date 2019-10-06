@@ -9,10 +9,12 @@ pub const Phase = enum(@TagType(c_flecs.EcsSystemKind)) {
 };
 
 pub const Rows = struct {
+    type_map: std.StringHashMap(u32),
     pub inner: *c_flecs.ecs_rows_t,
-    fn init(rows: *c_flecs.ecs_rows_t) @This() {
+    fn init(rows: *c_flecs.ecs_rows_t, type_map: std.StringHashMap(u32)) @This() {
         return @This() {
             .inner = rows,
+            .type_map = type_map,
         };
     }
 
@@ -28,20 +30,121 @@ pub const Rows = struct {
     /// that column (see the entity signature).
     /// If the column is shared, there will be only one data item.
     /// Otherwise, the length should be equal to self.count().
-    pub fn getColumn(self: @This(), comptime T: type, ix: u32) []T {
+    /// Prefer comp() to this, unless the extra performance is needed (one less hash table lookup)
+    pub fn col_ix(self: @This(), comptime T: type, ix: u32) []T {
         if (c_flecs.ecs_is_shared(self.inner, ix)) {
             return @ptrCast([*]T, @alignCast(@alignOf(T), c_flecs._ecs_column(self.inner, @sizeOf(T), 1)))[0..1];
         } else {
             return @ptrCast([*]T, @alignCast(@alignOf(T), c_flecs._ecs_column(self.inner, @sizeOf(T), 1)))[0..self.count()];
         }
     }
+
+    /// Get a component with a type. This is a convenience, function, and uses a
+    /// hash map to lookup the column of the type name. For maximum performance (but
+    /// slightly uglier code), access by the column index with col()
+    pub fn col(self: @This(), comptime T: type) []T {
+        const ix_opt = self.type_map.get(@typeName(T));
+        if (ix_opt) |ix| {
+            return self.col_ix(T, ix.value);
+        } else {
+            @panic("Can't find component " ++ @typeName(T) ++ " in system.");
+        }
+    }
 };
 
-/// Wrap a zig function in a C compatible ABI
-fn initSystemDispatcher(comptime function: fn (rows: Rows) void) extern fn (rows: [*c]c_flecs.ecs_rows_t) void {
+const ColModifier = enum {
+    Self,
+};
+
+const ColDesc = struct {
+    T: type,
+    modifier: ColModifier,
+};
+
+pub fn SystemSignature(comptime n: i32, comptime cols: [n]ColDesc) type {
+    // Compute signature as a string
+    comptime const string_sig = c"Pos";
     return struct {
-        pub extern "c" fn function(rows: [*c]c_flecs.ecs_rows_t) void { function(Rows.init(rows)); }
-    }.function;
+        pub fn count(self: @This()) i32 { return n; }
+        pub fn asStr(self: @This()) [*c]const u8 {
+            return string_sig;
+        }
+        pub fn getCols(self: @This()) comptime [n]ColDesc {
+            return cols;
+        }
+        pub fn getColIndex(comptime col: type) i32 {
+            comptime {
+                for (cols) |c, ix| {
+                    if (c.T == col) {
+                        return ix;
+                    }
+                }
+            }
+            @panic("Can't find col of type " ++ @typeName(col));
+        }
+        fn ThisPlusOneColumn(comptime T: type) type {
+            comptime const desc = ColDesc {.T = T, .modifier = ColModifier.Self};
+            return SystemSignature(n + 1, cols ++ [1]ColDesc{desc});
+        }
+        pub fn col(self: @This(), comptime T: type) ThisPlusOneColumn(T) {
+            return ThisPlusOneColumn(T) {};
+        }
+    };
+}
+
+pub fn buildSig() SystemSignature(0, [0]ColDesc {}) {
+    return SystemSignature(0, [0]ColDesc {}) {};
+}
+
+/// Get static memory with the given id. ID must be supplied so zig caches the
+/// result for the same T and same id.
+fn getStaticMemoryInit(comptime id: var, comptime val: var) *@typeOf(val) {
+    return &struct { pub var buf: @typeOf(val) = val; }.buf;
+}
+
+/// Get static memory with the given id. ID must be supplied so zig caches the
+/// result for the same T and same id.
+fn getStaticMemory(comptime id: var, comptime T: type) *T {
+    return &struct { pub var buf: T = undefined; }.buf;
+}
+
+/// Get a type map, mapping type names to column indexes
+fn getTypeMapForSystem(comptime system_id: var, comptime sig: var) std.StringHashMap(u32) {
+    return struct {
+        pub fn get() std.StringHashMap(u32) {
+            const TypeMapAndInitialised = struct {
+                init: bool = false,
+                type_map: std.StringHashMap(u32) = undefined,
+            };
+            // Initialise type map, to map type names to columns. Allocate
+            // enough for the columns we have, assuming each column takes 40 bytes
+            // for an entry in the hash map.
+            const bytes_per_entry = @sizeOf(std.StringHashMap(u32).Entry);
+            var type_map_memory = getStaticMemory(system_id, [bytes_per_entry * sig.getCols().len]u8);
+            var type_map_and_initialised = getStaticMemoryInit(system_id, TypeMapAndInitialised {});
+            if (!type_map_and_initialised.init) {
+                type_map_and_initialised.init = true;
+                const type_map = &type_map_and_initialised.type_map;
+                var fixed_alloc = std.heap.FixedBufferAllocator.init(type_map_memory[0..]);
+                var allocator = &fixed_alloc.allocator;
+                type_map.* = std.StringHashMap(u32).init(allocator);
+                type_map.ensureCapacityExact(sig.getCols().len) catch @panic("Error, not enough memory allocated");
+                // Insert types
+                inline for (sig.getCols()[0..]) |col_desc, ix| {
+                    _ = type_map.putAssumeCapacity(@typeName(col_desc.T), ix);
+                }
+            }
+            return type_map_and_initialised.type_map;
+        }
+    }.get();
+}
+
+/// Wrap a zig function in a C compatible ABI
+fn initSystemDispatcher(comptime function: fn (rows: Rows) void, comptime system_id: var, comptime sig: var)
+    extern fn (rows: [*c]c_flecs.ecs_rows_t) void {
+        return struct {
+            pub extern "c" fn function(rows: [*c]c_flecs.ecs_rows_t) void { function(Rows.init(rows, getTypeMapForSystem(system_id, sig))); }
+        }.function;
 }
 
 fn toCStringLit(comptime string: []const u8) [*c]const u8 {
@@ -110,13 +213,17 @@ pub const World = struct {
 
     /// Register a system with the given signature: https://github.com/SanderMertens/flecs/blob/master/Manual.md#system-signatures
     /// Need to provide a name for the system for better debug info.
-    pub fn registerSystem(self: @This(), comptime name: []const u8, phase: Phase,
-                          comptime function: fn(Rows) void, comptime sig: []const u8) void {
+    /// @param sig a SystemSignature
+    pub fn registerSystem(self: @This(),
+                          comptime name: []const u8,
+                          phase: Phase,
+                          comptime function: fn(Rows) void,
+                          comptime sig: var) void {
         const sys = c_flecs.ecs_new_system(self.inner,
                                            toCStringLit(name),
                                            @bitCast(c_flecs.EcsSystemKind, phase),
-                                           toCStringLit(sig),
-                                           initSystemDispatcher(function));
+                                           sig.asStr(),
+                                           initSystemDispatcher(function, name, sig));
     }
 
     /// Create a new entity with the given components. Add components later on with set().
